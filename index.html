@@ -85,16 +85,18 @@ th{color:var(--muted);font-weight:normal;}
       <div><span id="oppLabel">Rival</span><b id="oppScore">0</b></div>
     </div>
     <div class="status" id="gameStatus">Elegí en silencio</div>
+    <label for="trustRange" style="text-align:center;">Nivel de confianza en tu rival esta ronda: <b id="trustVal">3</b>/5</label>
+    <input type="range" id="trustRange" min="1" max="5" value="3" style="width:100%;">
     <div class="row" id="choiceRow">
-      <button class="choice-coop" id="btnCoop">Cooperar</button>
-      <button class="choice-betray" id="btnBetray">Traicionar</button>
+      <button class="choice-coop" id="btnCoop">Confío</button>
+      <button class="choice-betray" id="btnBetray">No confío</button>
     </div>
     <div class="result hidden" id="resultBox"></div>
     <button class="secondary" id="btnInfo" style="margin-top:16px;">Ver tabla de pagos</button>
     <table id="payTable" class="hidden">
-      <tr><th></th><th>Rival coopera</th><th>Rival traiciona</th></tr>
-      <tr><th>Vos cooperás</th><td>3 / 3</td><td>0 / 5</td></tr>
-      <tr><th>Vos traicionás</th><td>5 / 0</td><td>1 / 1</td></tr>
+      <tr><th></th><th>Rival confía</th><th>Rival no confía</th></tr>
+      <tr><th>Vos confiás</th><td>3 / 3</td><td>0 / 5</td></tr>
+      <tr><th>Vos no confiás</th><td>5 / 0</td><td>1 / 1</td></tr>
     </table>
     <div class="historyWrap">
       <table id="historyTable">
@@ -110,6 +112,7 @@ let TOTAL_ROUNDS = 30;
 let peer=null, conn=null, role=null;
 let myName='Vos', oppName='Rival';
 let round=1, myScore=0, oppScore=0, myChoice=null, oppChoice=null, myChoiceTime=null, oppChoiceTime=null;
+let myTrust=null, oppTrust=null;
 let history=[], finished=false, roundStartTime=null;
 
 function $(id){return document.getElementById(id);}
@@ -186,6 +189,7 @@ function wireConn(){
     } else if(data.type==='choice'){
       oppChoice = data.choice;
       oppChoiceTime = data.time;
+      oppTrust = data.trust;
       maybeResolve();
     }
   });
@@ -198,11 +202,14 @@ function startRound(){
   roundStartTime = Date.now();
 }
 
+$('trustRange').oninput = ()=>{ $('trustVal').textContent = $('trustRange').value; };
+
 function choose(c){
   if(myChoice || finished) return;
   myChoice = c;
   myChoiceTime = ((Date.now()-roundStartTime)/1000).toFixed(1);
-  conn.send({type:'choice', choice:c, time:myChoiceTime});
+  myTrust = $('trustRange').value;
+  conn.send({type:'choice', choice:c, time:myChoiceTime, trust:myTrust});
   render();
   maybeResolve();
 }
@@ -217,15 +224,16 @@ function maybeResolve(){
   else if(myChoice==='coop' && oppChoice==='betray'){mp=0;op=5;}
   else {mp=5;op=0;}
   myScore+=mp; oppScore+=op;
-  history.push({round, my:myChoice, myTime:myChoiceTime, opp:oppChoice, oppTime:oppChoiceTime, mp, op});
+  history.push({round, my:myChoice, myTime:myChoiceTime, myTrust:myTrust, opp:oppChoice, oppTime:oppChoiceTime, oppTrust:oppTrust, mp, op});
   const wasLastRound = round>=TOTAL_ROUNDS;
   round++;
-  myChoice=null; oppChoice=null; myChoiceTime=null; oppChoiceTime=null;
+  myChoice=null; oppChoice=null; myChoiceTime=null; oppChoiceTime=null; myTrust=null; oppTrust=null;
+  $('trustRange').value = 3; $('trustVal').textContent = 3;
   if(wasLastRound) finished=true; else startRound();
   render();
 }
 
-function label(c){ return c==='coop' ? 'Cooperó' : 'Traicionó'; }
+function label(c){ return c==='coop' ? 'Confió' : 'No confió'; }
 
 function render(){
   $('myLabel').textContent = myName;
@@ -252,7 +260,7 @@ function render(){
   }
 
   $('historyBody').innerHTML = history.map(h=>
-    `<tr><td>${h.round}</td><td>${label(h.my)} (${h.myTime}s)</td><td>${label(h.opp)} (${h.oppTime}s)</td><td>+${h.mp}</td></tr>`
+    `<tr><td>${h.round}</td><td>${label(h.my)} (${h.myTime}s, confianza ${h.myTrust}/5)</td><td>${label(h.opp)} (${h.oppTime}s, confianza ${h.oppTrust}/5)</td><td>+${h.mp}</td></tr>`
   ).join('');
   const wrap = document.querySelector('.historyWrap');
   wrap.scrollTop = wrap.scrollHeight;

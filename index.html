@@ -85,18 +85,22 @@ th{color:var(--muted);font-weight:normal;}
       <div><span id="oppLabel">Rival</span><b id="oppScore">0</b></div>
     </div>
     <div class="status" id="gameStatus">Elegí en silencio</div>
-    <label for="trustRange" style="text-align:center;">Nivel de confianza en tu rival esta ronda: <b id="trustVal">3</b>/5</label>
-    <input type="range" id="trustRange" min="1" max="5" value="3" style="width:100%;">
-    <div class="row" id="choiceRow">
-      <button class="choice-coop" id="btnCoop">Confío</button>
-      <button class="choice-betray" id="btnBetray">No confío</button>
+    <label style="text-align:center;">Nivel de confianza en tu rival esta ronda</label>
+    <div class="row" id="trustPicker">
+      <button class="small" data-t="mucho">Mucho</button>
+      <button class="small" data-t="poco">Poco</button>
+      <button class="small" data-t="nada">Nada</button>
+    </div>
+    <div class="row" id="choiceRow" style="margin-top:10px;">
+      <button class="choice-coop" id="btnCoop" disabled>Coopero</button>
+      <button class="choice-betray" id="btnBetray" disabled>No coopero</button>
     </div>
     <div class="result hidden" id="resultBox"></div>
     <button class="secondary" id="btnInfo" style="margin-top:16px;">Ver tabla de pagos</button>
     <table id="payTable" class="hidden">
-      <tr><th></th><th>Rival confía</th><th>Rival no confía</th></tr>
-      <tr><th>Vos confiás</th><td>3 / 3</td><td>0 / 5</td></tr>
-      <tr><th>Vos no confiás</th><td>5 / 0</td><td>1 / 1</td></tr>
+      <tr><th></th><th>Rival coopera</th><th>Rival no coopera</th></tr>
+      <tr><th>Vos cooperás</th><td>3 / 3</td><td>0 / 5</td></tr>
+      <tr><th>Vos no cooperás</th><td>5 / 0</td><td>1 / 1</td></tr>
     </table>
     <div class="historyWrap">
       <table id="historyTable">
@@ -202,13 +206,21 @@ function startRound(){
   roundStartTime = Date.now();
 }
 
-$('trustRange').oninput = ()=>{ $('trustVal').textContent = $('trustRange').value; };
+document.querySelectorAll('#trustPicker button').forEach(b=>{
+  b.onclick = ()=>{
+    if(myChoice || finished) return;
+    document.querySelectorAll('#trustPicker button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    myTrust = b.dataset.t;
+    $('btnCoop').disabled = false;
+    $('btnBetray').disabled = false;
+  };
+});
 
 function choose(c){
-  if(myChoice || finished) return;
+  if(myChoice || finished || !myTrust) return;
   myChoice = c;
   myChoiceTime = ((Date.now()-roundStartTime)/1000).toFixed(1);
-  myTrust = $('trustRange').value;
   conn.send({type:'choice', choice:c, time:myChoiceTime, trust:myTrust});
   render();
   maybeResolve();
@@ -228,12 +240,13 @@ function maybeResolve(){
   const wasLastRound = round>=TOTAL_ROUNDS;
   round++;
   myChoice=null; oppChoice=null; myChoiceTime=null; oppChoiceTime=null; myTrust=null; oppTrust=null;
-  $('trustRange').value = 3; $('trustVal').textContent = 3;
+  document.querySelectorAll('#trustPicker button').forEach(x=>x.classList.remove('active'));
   if(wasLastRound) finished=true; else startRound();
   render();
 }
 
-function label(c){ return c==='coop' ? 'Confió' : 'No confió'; }
+function label(c){ return c==='coop' ? 'Cooperó' : 'No cooperó'; }
+function trustLabel(t){ return t==='mucho'?'Mucho':t==='poco'?'Poco':'Nada'; }
 
 function render(){
   $('myLabel').textContent = myName;
@@ -253,14 +266,14 @@ function render(){
     $('gameStatus').textContent = '';
   } else {
     show('choiceRow');
-    $('btnCoop').disabled = !!myChoice;
-    $('btnBetray').disabled = !!myChoice;
+    $('btnCoop').disabled = !!myChoice || !myTrust;
+    $('btnBetray').disabled = !!myChoice || !myTrust;
     if(!myChoice) $('gameStatus').textContent = 'Elegí en silencio';
     else if(!oppChoice) $('gameStatus').textContent = 'Ya elegiste. Esperando al rival…';
   }
 
   $('historyBody').innerHTML = history.map(h=>
-    `<tr><td>${h.round}</td><td>${label(h.my)} (${h.myTime}s, confianza ${h.myTrust}/5)</td><td>${label(h.opp)} (${h.oppTime}s, confianza ${h.oppTrust}/5)</td><td>+${h.mp}</td></tr>`
+    `<tr><td>${h.round}</td><td>${label(h.my)} (${h.myTime}s, confianza: ${trustLabel(h.myTrust)})</td><td>${label(h.opp)} (${h.oppTime}s, confianza: ${trustLabel(h.oppTrust)})</td><td>+${h.mp}</td></tr>`
   ).join('');
   const wrap = document.querySelector('.historyWrap');
   wrap.scrollTop = wrap.scrollHeight;

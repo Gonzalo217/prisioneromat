@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El Dilema del Prisionero</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#f4f1ea; --panel:#fffdf8; --ink:#2b2620; --muted:#7a7266;
+  --accent:#a1442b; --line:#ddd5c5; --coop:#2f5d4f; --betray:#a1442b;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1c1a16; --panel:#26231d; --ink:#ede7db; --muted:#a99f8d; --accent:#e07a5f; --line:#3a3529; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,'Iowan Old Style',serif;display:flex;justify-content:center;}
+.wrap{width:100%;max-width:560px;padding:32px 20px 48px;}
+h1{font-size:1.6rem;margin:0 0 4px;}
+.sub{color:var(--muted);font-size:.92rem;margin-bottom:28px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;margin-bottom:16px;}
+button{font-family:inherit;font-size:1rem;border:1px solid var(--ink);background:var(--ink);color:var(--bg);
+  padding:11px 18px;border-radius:7px;cursor:pointer;width:100%;margin-top:8px;}
+button.secondary{background:transparent;color:var(--ink);border:1px solid var(--line);}
+button:disabled{opacity:.45;cursor:default;}
+input[type=text]{width:100%;font-family:inherit;font-size:1.1rem;letter-spacing:.08em;text-transform:uppercase;
+  padding:11px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);text-align:center;}
+.code{font-size:1.6rem;letter-spacing:.1em;text-align:center;font-weight:bold;padding:14px 0;color:var(--accent);word-break:break-all;}
+.row{display:flex;gap:10px;}
+.row button{margin-top:0;}
+.choice-coop{background:var(--coop);border-color:var(--coop);}
+.choice-betray{background:var(--betray);border-color:var(--betray);}
+.status{color:var(--muted);font-size:.9rem;text-align:center;margin:6px 0 14px;}
+.scoreboard{display:flex;justify-content:space-between;margin-bottom:14px;font-size:.95rem;}
+.scoreboard b{font-size:1.4rem;display:block;}
+table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:10px;}
+th,td{border:1px solid var(--line);padding:6px;text-align:center;}
+th{color:var(--muted);font-weight:normal;}
+.history{max-height:160px;overflow-y:auto;font-size:.85rem;margin-top:10px;}
+.history div{padding:4px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;}
+.result{text-align:center;font-size:1.15rem;margin:14px 0;font-weight:bold;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>El Dilema del Prisionero</h1>
+  <div class="sub">30 rondas — juego online para dos personas</div>
+
+  <div id="home" class="card">
+    <button id="btnCreate">Crear partida</button>
+    <button id="btnShowJoin" class="secondary">Unirse con un código</button>
+    <div id="joinBox" class="hidden" style="margin-top:14px;">
+      <input type="text" id="codeInput" placeholder="CÓDIGO">
+      <button id="btnJoin">Unirme</button>
+    </div>
+  </div>
+
+  <div id="waiting" class="card hidden">
+    <div style="text-align:center;color:var(--muted);">Compartí este código con tu rival</div>
+    <div class="code" id="codeDisplay"></div>
+    <div class="status" id="waitStatus">Esperando a que se conecte el segundo jugador…</div>
+  </div>
+
+  <div id="game" class="card hidden">
+    <div class="scoreboard">
+      <div>Vos <b id="myScore">0</b></div>
+      <div>Ronda <b id="roundNum">1</b>/30</div>
+      <div>Rival <b id="oppScore">0</b></div>
+    </div>
+    <div class="status" id="gameStatus">Elegí en silencio</div>
+    <div class="row" id="choiceRow">
+      <button class="choice-coop" id="btnCoop">Cooperar</button>
+      <button class="choice-betray" id="btnBetray">Traicionar</button>
+    </div>
+    <div class="result hidden" id="resultBox"></div>
+    <button class="secondary" id="btnInfo" style="margin-top:16px;">Ver tabla de pagos</button>
+    <table id="payTable" class="hidden">
+      <tr><th></th><th>Rival coopera</th><th>Rival traiciona</th></tr>
+      <tr><th>Vos cooperás</th><td>3 / 3</td><td>0 / 5</td></tr>
+      <tr><th>Vos traicionás</th><td>5 / 0</td><td>1 / 1</td></tr>
+    </table>
+    <div class="history" id="historyBox"></div>
+  </div>
+</div>
+
+<script>
+const TOTAL_ROUNDS = 30;
+let peer=null, conn=null, role=null;
+let round=1, myScore=0, oppScore=0, myChoice=null, oppChoice=null, history=[], finished=false;
+
+function $(id){return document.getElementById(id);}
+function show(id){$(id).classList.remove('hidden');}
+function hide(id){$(id).classList.add('hidden');}
+function genCode(){
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let c='pd30-'; for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+
+$('btnCreate').onclick = ()=>{
+  role='host';
+  const code = genCode();
+  peer = new Peer(code);
+  peer.on('open', ()=>{
+    $('codeDisplay').textContent = code;
+    hide('home'); show('waiting');
+  });
+  peer.on('connection', c=>{
+    conn = c;
+    wireConn();
+    $('waitStatus').textContent = 'Conectando…';
+  });
+  peer.on('error', e=>{
+    alert('Error de conexión: '+e.type+'. Probá crear la partida de nuevo.');
+  });
+};
+
+$('btnShowJoin').onclick = ()=> show('joinBox');
+
+$('btnJoin').onclick = ()=>{
+  const code = $('codeInput').value.trim().toLowerCase();
+  if(!code){ alert('Ingresá el código de la partida.'); return; }
+  role='guest';
+  peer = new Peer();
+  peer.on('open', ()=>{
+    conn = peer.connect(code, {reliable:true});
+    wireConn();
+  });
+  peer.on('error', e=>{
+    alert('No se pudo conectar. Revisá el código. ('+e.type+')');
+  });
+};
+
+function wireConn(){
+  conn.on('open', ()=>{
+    hide('home'); hide('waiting'); show('game');
+    render();
+  });
+  conn.on('data', data=>{
+    if(data.type==='choice'){
+      oppChoice = data.choice;
+      maybeResolve();
+    }
+  });
+  conn.on('close', ()=>{
+    $('gameStatus').textContent = 'Tu rival se desconectó.';
+  });
+}
+
+function choose(c){
+  if(myChoice || finished) return;
+  myChoice = c;
+  conn.send({type:'choice', choice:c});
+  render();
+  maybeResolve();
+}
+$('btnCoop').onclick = ()=>choose('coop');
+$('btnBetray').onclick = ()=>choose('betray');
+
+function maybeResolve(){
+  if(!myChoice || !oppChoice || finished) return;
+  let mp, op;
+  if(myChoice==='coop' && oppChoice==='coop'){mp=3;op=3;}
+  else if(myChoice==='betray' && oppChoice==='betray'){mp=1;op=1;}
+  else if(myChoice==='coop' && oppChoice==='betray'){mp=0;op=5;}
+  else {mp=5;op=0;}
+  myScore+=mp; oppScore+=op;
+  history.push({round, my:myChoice, opp:oppChoice, mp, op});
+  const wasLastRound = round>=TOTAL_ROUNDS;
+  round++;
+  myChoice=null; oppChoice=null;
+  if(wasLastRound) finished=true;
+  render();
+}
+
+function label(c){ return c==='coop' ? 'Cooperó' : 'Traicionó'; }
+
+function render(){
+  $('myScore').textContent = myScore;
+  $('oppScore').textContent = oppScore;
+  $('roundNum').textContent = Math.min(round, TOTAL_ROUNDS);
+
+  if(finished){
+    hide('choiceRow');
+    let msg = myScore>oppScore ? '¡Ganaste!' : myScore<oppScore ? 'Perdiste' : 'Empate';
+    $('resultBox').textContent = `Partida terminada — ${msg} (${myScore} vs ${oppScore})`;
+    show('resultBox');
+    $('gameStatus').textContent = '';
+  } else {
+    show('choiceRow');
+    $('btnCoop').disabled = !!myChoice;
+    $('btnBetray').disabled = !!myChoice;
+    if(!myChoice) $('gameStatus').textContent = 'Elegí en silencio';
+    else if(!oppChoice) $('gameStatus').textContent = 'Ya elegiste. Esperando al rival…';
+  }
+
+  $('historyBox').innerHTML = history.slice().reverse().map(h=>
+    `<div><span>Ronda ${h.round}</span><span>Vos: ${label(h.my)} · Rival: ${label(h.opp)} (+${h.mp})</span></div>`
+  ).join('');
+}
+
+$('btnInfo').onclick = ()=>{
+  $('payTable').classList.toggle('hidden');
+};
+</script>
+</body>
+</html>

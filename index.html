@@ -94,7 +94,7 @@ function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
 function genCode(){
   const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let c='pd30-'; for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+  let c='PD30-'; for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
   return c;
 }
 
@@ -119,7 +119,7 @@ $('btnCreate').onclick = ()=>{
 $('btnShowJoin').onclick = ()=> show('joinBox');
 
 $('btnJoin').onclick = ()=>{
-  const code = $('codeInput').value.trim().toLowerCase();
+  const code = $('codeInput').value.trim().toUpperCase();
   if(!code){ alert('Ingresá el código de la partida.'); return; }
   role='guest';
   peer = new Peer();

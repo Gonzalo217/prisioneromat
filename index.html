@@ -15,16 +15,20 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,'Iowan Old Style',serif;display:flex;justify-content:center;}
-.wrap{width:100%;max-width:560px;padding:32px 20px 48px;}
+.wrap{width:100%;max-width:600px;padding:32px 20px 48px;}
 h1{font-size:1.6rem;margin:0 0 4px;}
 .sub{color:var(--muted);font-size:.92rem;margin-bottom:28px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;margin-bottom:16px;}
+label{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px;}
 button{font-family:inherit;font-size:1rem;border:1px solid var(--ink);background:var(--ink);color:var(--bg);
   padding:11px 18px;border-radius:7px;cursor:pointer;width:100%;margin-top:8px;}
 button.secondary{background:transparent;color:var(--ink);border:1px solid var(--line);}
+button.small{width:auto;flex:1;font-size:.85rem;padding:8px;margin-top:0;}
+button.small.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 button:disabled{opacity:.45;cursor:default;}
-input[type=text]{width:100%;font-family:inherit;font-size:1.1rem;letter-spacing:.08em;text-transform:uppercase;
+input[type=text]{width:100%;font-family:inherit;font-size:1rem;
   padding:11px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);text-align:center;}
+input#codeInput{text-transform:uppercase;letter-spacing:.08em;font-size:1.1rem;}
 .code{font-size:1.6rem;letter-spacing:.1em;text-align:center;font-weight:bold;padding:14px 0;color:var(--accent);word-break:break-all;}
 .row{display:flex;gap:10px;}
 .row button{margin-top:0;}
@@ -33,11 +37,11 @@ input[type=text]{width:100%;font-family:inherit;font-size:1.1rem;letter-spacing:
 .status{color:var(--muted);font-size:.9rem;text-align:center;margin:6px 0 14px;}
 .scoreboard{display:flex;justify-content:space-between;margin-bottom:14px;font-size:.95rem;}
 .scoreboard b{font-size:1.4rem;display:block;}
-table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:10px;}
-th,td{border:1px solid var(--line);padding:6px;text-align:center;}
+.scoreboard span{font-size:.8rem;color:var(--muted);}
+table{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:10px;}
+th,td{border:1px solid var(--line);padding:5px 4px;text-align:center;}
 th{color:var(--muted);font-weight:normal;}
-.history{max-height:160px;overflow-y:auto;font-size:.85rem;margin-top:10px;}
-.history div{padding:4px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;}
+.historyWrap{max-height:220px;overflow-y:auto;margin-top:6px;}
 .result{text-align:center;font-size:1.15rem;margin:14px 0;font-weight:bold;}
 .hidden{display:none;}
 </style>
@@ -45,12 +49,23 @@ th{color:var(--muted);font-weight:normal;}
 <body>
 <div class="wrap">
   <h1>El Dilema del Prisionero</h1>
-  <div class="sub">30 rondas — juego online para dos personas</div>
+  <div class="sub">Juego online para dos personas</div>
 
   <div id="home" class="card">
+    <label for="nameInput">Tu nombre</label>
+    <input type="text" id="nameInput" placeholder="Ej: Gonza">
+
+    <label>Cantidad de rondas (para crear partida)</label>
+    <div class="row" id="roundPicker">
+      <button class="small" data-r="10">10</button>
+      <button class="small" data-r="20">20</button>
+      <button class="small active" data-r="30">30</button>
+    </div>
+
     <button id="btnCreate">Crear partida</button>
     <button id="btnShowJoin" class="secondary">Unirse con un código</button>
     <div id="joinBox" class="hidden" style="margin-top:14px;">
+      <label for="codeInput">Código de la partida</label>
       <input type="text" id="codeInput" placeholder="CÓDIGO">
       <button id="btnJoin">Unirme</button>
     </div>
@@ -59,14 +74,15 @@ th{color:var(--muted);font-weight:normal;}
   <div id="waiting" class="card hidden">
     <div style="text-align:center;color:var(--muted);">Compartí este código con tu rival</div>
     <div class="code" id="codeDisplay"></div>
+    <button id="btnCopy" class="secondary">Copiar código</button>
     <div class="status" id="waitStatus">Esperando a que se conecte el segundo jugador…</div>
   </div>
 
   <div id="game" class="card hidden">
     <div class="scoreboard">
-      <div>Vos <b id="myScore">0</b></div>
-      <div>Ronda <b id="roundNum">1</b>/30</div>
-      <div>Rival <b id="oppScore">0</b></div>
+      <div><span id="myLabel">Vos</span><b id="myScore">0</b></div>
+      <div>Ronda <b id="roundNum">1</b>/<span id="totalRounds">30</span></div>
+      <div><span id="oppLabel">Rival</span><b id="oppScore">0</b></div>
     </div>
     <div class="status" id="gameStatus">Elegí en silencio</div>
     <div class="row" id="choiceRow">
@@ -80,26 +96,46 @@ th{color:var(--muted);font-weight:normal;}
       <tr><th>Vos cooperás</th><td>3 / 3</td><td>0 / 5</td></tr>
       <tr><th>Vos traicionás</th><td>5 / 0</td><td>1 / 1</td></tr>
     </table>
-    <div class="history" id="historyBox"></div>
+    <div class="historyWrap">
+      <table id="historyTable">
+        <thead><tr><th>Ronda</th><th id="myColHead">Vos</th><th id="oppColHead">Rival</th><th>Puntos</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <script>
-const TOTAL_ROUNDS = 30;
+let TOTAL_ROUNDS = 30;
 let peer=null, conn=null, role=null;
-let round=1, myScore=0, oppScore=0, myChoice=null, oppChoice=null, history=[], finished=false;
+let myName='Vos', oppName='Rival';
+let round=1, myScore=0, oppScore=0, myChoice=null, oppChoice=null, myChoiceTime=null, oppChoiceTime=null;
+let history=[], finished=false, roundStartTime=null;
 
 function $(id){return document.getElementById(id);}
 function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
 function genCode(){
   const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let c='PD30-'; for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+  let c='PD-'; for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
   return c;
+}
+
+document.querySelectorAll('#roundPicker button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#roundPicker button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    TOTAL_ROUNDS = parseInt(b.dataset.r,10);
+  };
+});
+
+function getName(){
+  return ($('nameInput').value.trim() || 'Jugador').slice(0,20);
 }
 
 $('btnCreate').onclick = ()=>{
   role='host';
+  myName = getName();
   const code = genCode();
   peer = new Peer(code);
   peer.on('open', ()=>{
@@ -122,6 +158,7 @@ $('btnJoin').onclick = ()=>{
   const code = $('codeInput').value.trim().toUpperCase();
   if(!code){ alert('Ingresá el código de la partida.'); return; }
   role='guest';
+  myName = getName();
   peer = new Peer();
   peer.on('open', ()=>{
     conn = peer.connect(code, {reliable:true});
@@ -135,11 +172,20 @@ $('btnJoin').onclick = ()=>{
 function wireConn(){
   conn.on('open', ()=>{
     hide('home'); hide('waiting'); show('game');
+    const hello = {type:'hello', name:myName};
+    if(role==='host') hello.rounds = TOTAL_ROUNDS;
+    conn.send(hello);
+    startRound();
     render();
   });
   conn.on('data', data=>{
-    if(data.type==='choice'){
+    if(data.type==='hello'){
+      oppName = data.name || 'Rival';
+      if(role==='guest' && data.rounds) TOTAL_ROUNDS = data.rounds;
+      render();
+    } else if(data.type==='choice'){
       oppChoice = data.choice;
+      oppChoiceTime = data.time;
       maybeResolve();
     }
   });
@@ -148,10 +194,15 @@ function wireConn(){
   });
 }
 
+function startRound(){
+  roundStartTime = Date.now();
+}
+
 function choose(c){
   if(myChoice || finished) return;
   myChoice = c;
-  conn.send({type:'choice', choice:c});
+  myChoiceTime = ((Date.now()-roundStartTime)/1000).toFixed(1);
+  conn.send({type:'choice', choice:c, time:myChoiceTime});
   render();
   maybeResolve();
 }
@@ -166,20 +217,25 @@ function maybeResolve(){
   else if(myChoice==='coop' && oppChoice==='betray'){mp=0;op=5;}
   else {mp=5;op=0;}
   myScore+=mp; oppScore+=op;
-  history.push({round, my:myChoice, opp:oppChoice, mp, op});
+  history.push({round, my:myChoice, myTime:myChoiceTime, opp:oppChoice, oppTime:oppChoiceTime, mp, op});
   const wasLastRound = round>=TOTAL_ROUNDS;
   round++;
-  myChoice=null; oppChoice=null;
-  if(wasLastRound) finished=true;
+  myChoice=null; oppChoice=null; myChoiceTime=null; oppChoiceTime=null;
+  if(wasLastRound) finished=true; else startRound();
   render();
 }
 
 function label(c){ return c==='coop' ? 'Cooperó' : 'Traicionó'; }
 
 function render(){
+  $('myLabel').textContent = myName;
+  $('oppLabel').textContent = oppName;
+  $('myColHead').textContent = myName;
+  $('oppColHead').textContent = oppName;
   $('myScore').textContent = myScore;
   $('oppScore').textContent = oppScore;
   $('roundNum').textContent = Math.min(round, TOTAL_ROUNDS);
+  $('totalRounds').textContent = TOTAL_ROUNDS;
 
   if(finished){
     hide('choiceRow');
@@ -195,10 +251,22 @@ function render(){
     else if(!oppChoice) $('gameStatus').textContent = 'Ya elegiste. Esperando al rival…';
   }
 
-  $('historyBox').innerHTML = history.slice().reverse().map(h=>
-    `<div><span>Ronda ${h.round}</span><span>Vos: ${label(h.my)} · Rival: ${label(h.opp)} (+${h.mp})</span></div>`
+  $('historyBody').innerHTML = history.map(h=>
+    `<tr><td>${h.round}</td><td>${label(h.my)} (${h.myTime}s)</td><td>${label(h.opp)} (${h.oppTime}s)</td><td>+${h.mp}</td></tr>`
   ).join('');
+  const wrap = document.querySelector('.historyWrap');
+  wrap.scrollTop = wrap.scrollHeight;
 }
+
+$('btnCopy').onclick = ()=>{
+  const code = $('codeDisplay').textContent;
+  navigator.clipboard.writeText(code).then(()=>{
+    $('btnCopy').textContent = '¡Copiado!';
+    setTimeout(()=>{ $('btnCopy').textContent = 'Copiar código'; }, 1500);
+  }).catch(()=>{
+    alert('No se pudo copiar. Código: '+code);
+  });
+};
 
 $('btnInfo').onclick = ()=>{
   $('payTable').classList.toggle('hidden');
